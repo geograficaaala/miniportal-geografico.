@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="description" content="Mini geoportal temático de Guatemala con capas de hidrografía y conservación.">
-  <title>Mini Geoportal Geográfico</title>
+  <title>Geoportal temático</title>
 
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
@@ -25,7 +25,7 @@
       --fondo: #f3f5f4;
       --blanco: #ffffff;
       --sombra: 0 2px 10px rgba(21, 55, 42, 0.14);
-      --alto-cabecera: 64px;
+      --alto-cabecera: 48px;
       --alto-pie: 30px;
       --ancho-panel: 318px;
     }
@@ -61,10 +61,10 @@
       z-index: 20;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 18px;
+      justify-content: flex-end;
+      gap: 8px;
       min-width: 0;
-      padding: 0 16px;
+      padding: 0 14px;
       color: var(--azul-900);
       background: #fff;
       border-bottom: 1px solid #d8dfe3;
@@ -570,16 +570,33 @@
 
     .mobile-panel-button { display: none; }
 
+    .mobile-layers-button {
+      position: absolute;
+      z-index: 6;
+      top: 10px;
+      left: 10px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      color: var(--azul-900);
+      border: 1px solid rgba(38, 72, 58, 0.24);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--sombra);
+      cursor: pointer;
+    }
+
+    .mobile-layers-button svg { width: 18px; height: 18px; }
+
     @media (max-width: 760px) {
-      :root { --alto-cabecera: 58px; --alto-pie: 42px; }
+      :root { --alto-cabecera: 48px; --alto-pie: 42px; }
 
       .topbar { padding: 0 10px; gap: 8px; }
-      .brand-mark { width: 34px; height: 34px; flex-basis: 34px; }
-      .brand-title { font-size: 14px; }
-      .brand-subtitle { display: none; }
-      .chip-label { display: none; }
-      .chip { width: 32px; min-height: 32px; padding: 6px; }
-      .mobile-panel-button { display: inline-flex; }
+      .chip { min-height: 30px; padding: 6px 10px; }
+      .mobile-layers-button { display: inline-flex; }
 
       .workspace { grid-template-columns: minmax(0, 1fr); }
 
@@ -608,7 +625,7 @@
       }
 
       .workspace.panel-open::after { visibility: visible; opacity: 1; }
-      .map-badge { left: 10px; top: 10px; }
+      .map-badge { left: 52px; top: 10px; }
 
       .footer {
         align-items: flex-start;
@@ -627,24 +644,7 @@
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M4 19c5.8.2 11.4-3.8 14.8-11.8-6.7-.6-12.2 2.1-14.2 7.2C4 16 3.9 17.5 4 19Z" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M5 18c3.3-3 6.6-5.1 10.4-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <div class="brand-copy">
-          <h1 class="brand-title">Mini Geoportal Geográfico</h1>
-          <p class="brand-subtitle">Información temática de recursos naturales de Guatemala</p>
-        </div>
-      </div>
-
-      <nav class="toolbar" aria-label="Herramientas principales">
-        <button class="chip mobile-panel-button" id="toggle-panel" type="button" title="Mostrar capas" aria-label="Mostrar capas">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/></svg>
-          <span class="chip-label">Capas</span>
-        </button>
+      <nav class="toolbar" aria-label="Modos de visualización">
         <button class="chip active" type="button" aria-current="page" title="Mapa 2D">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"/><path d="M9 3v15M15 6v15"/></svg>
           <span class="chip-label">Mapa 2D</span>
@@ -652,14 +652,6 @@
         <button class="chip pending" id="viewer-3d" type="button" title="Visor 3D: próxima etapa">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2.7 8 4.6v9.3l-8 4.7-8-4.7V7.3l8-4.6Z"/><path d="m4.3 7.5 7.7 4.4 7.7-4.4M12 12v9"/></svg>
           <span class="chip-label">Visor 3D</span>
-        </button>
-        <button class="chip" id="home-view" type="button" title="Vista inicial">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></svg>
-          <span class="chip-label">Vista inicial</span>
-        </button>
-        <button class="chip" id="clear-selection" type="button" title="Limpiar selección">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 16 16M20 4 4 20"/></svg>
-          <span class="chip-label">Limpiar</span>
         </button>
       </nav>
     </header>
@@ -688,9 +680,20 @@
           </button>
           <div class="group-content" id="group-conservacion"></div>
         </section>
+
+        <section class="layer-group" data-group="administrativa">
+          <button class="group-title" type="button" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            División administrativa
+          </button>
+          <div class="group-content" id="group-administrativa"></div>
+        </section>
       </aside>
 
       <section class="map-wrap" aria-label="Mapa interactivo">
+        <button class="mobile-layers-button" id="toggle-panel" type="button" title="Mostrar capas" aria-label="Mostrar capas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/></svg>
+        </button>
         <div id="map"></div>
         <div class="map-badge" id="map-status" aria-live="polite">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>
@@ -812,6 +815,38 @@
           ['Tipo VI', '#8d6e63'],
           ['Sin categoría', '#78909c']
         ]
+      },
+      {
+        id: 'departamentos',
+        name: 'Departamentos',
+        group: 'administrativa',
+        file: './Departamentos.geojson',
+        visible: true,
+        opacity: 0.62,
+        lineOnly: true,
+        interactive: false,
+        lineColor: '#a94442',
+        lineWidth: 1.05,
+        legendStyle: 'line',
+        legend: [
+          ['Límite departamental', '#a94442']
+        ]
+      },
+      {
+        id: 'municipios',
+        name: 'Municipios',
+        group: 'administrativa',
+        file: './Municipios.geojson',
+        visible: true,
+        opacity: 0.42,
+        lineOnly: true,
+        interactive: false,
+        lineColor: '#a94442',
+        lineWidth: 0.55,
+        legendStyle: 'line',
+        legend: [
+          ['Límite municipal', '#a94442']
+        ]
       }
     ];
 
@@ -908,7 +943,7 @@
               <div class="legend-title">Leyenda</div>
               ${config.legend.map(([label, color]) => `
                 <div class="legend-item">
-                  <span class="legend-swatch" style="background:${color}"></span>
+                  <span class="legend-swatch${config.legendStyle === 'line' ? ' line' : ''}" style="${config.legendStyle === 'line' ? `background:transparent;border-top-color:${color}` : `background:${color}`}"></span>
                   <span>${escapeHtml(label)}</span>
                 </div>
               `).join('')}
@@ -994,17 +1029,19 @@
           state.loadedData.set(config.id, data);
           map.addSource(config.id, { type: 'geojson', data, generateId: true });
 
-          map.addLayer({
-            id: `${config.id}-fill`,
-            type: 'fill',
-            source: config.id,
-            paint: {
-              'fill-color': config.fillColor,
-              'fill-opacity': opacityExpression(config.opacity),
-              'fill-antialias': true
-            },
-            layout: { visibility: config.visible ? 'visible' : 'none' }
-          });
+          if (!config.lineOnly) {
+            map.addLayer({
+              id: `${config.id}-fill`,
+              type: 'fill',
+              source: config.id,
+              paint: {
+                'fill-color': config.fillColor,
+                'fill-opacity': opacityExpression(config.opacity),
+                'fill-antialias': true
+              },
+              layout: { visibility: config.visible ? 'visible' : 'none' }
+            });
+          }
 
           map.addLayer({
             id: `${config.id}-line`,
@@ -1012,28 +1049,32 @@
             source: config.id,
             paint: {
               'line-color': config.lineColor,
-              'line-opacity': Math.min(1, config.opacity + 0.24),
-              'line-width': [
-                'case',
-                ['boolean', ['feature-state', 'hover'], false], 1.8,
-                0.8
-              ]
+              'line-opacity': config.lineOnly ? config.opacity : Math.min(1, config.opacity + 0.24),
+              'line-width': config.lineOnly
+                ? config.lineWidth
+                : [
+                    'case',
+                    ['boolean', ['feature-state', 'hover'], false], 1.8,
+                    0.8
+                  ]
             },
             layout: { visibility: config.visible ? 'visible' : 'none' }
           });
 
-          map.addLayer({
-            id: `${config.id}-selection`,
-            type: 'line',
-            source: config.id,
-            filter: NONE_FILTER,
-            paint: {
-              'line-color': '#f1b83c',
-              'line-width': 3.2,
-              'line-opacity': 1
-            },
-            layout: { visibility: config.visible ? 'visible' : 'none' }
-          });
+          if (config.interactive !== false && !config.lineOnly) {
+            map.addLayer({
+              id: `${config.id}-selection`,
+              type: 'line',
+              source: config.id,
+              filter: NONE_FILTER,
+              paint: {
+                'line-color': '#f1b83c',
+                'line-width': 3.2,
+                'line-opacity': 1
+              },
+              layout: { visibility: config.visible ? 'visible' : 'none' }
+            });
+          }
 
           reorderLayers();
           updateLayerStatus(config, 'ready', `${data.features.length.toLocaleString('es-GT')} elementos`);
@@ -1077,7 +1118,11 @@
         map.setPaintProperty(`${config.id}-fill`, 'fill-opacity', opacityExpression(config.opacity));
       }
       if (map.getLayer(`${config.id}-line`)) {
-        map.setPaintProperty(`${config.id}-line`, 'line-opacity', Math.min(1, config.opacity + 0.24));
+        map.setPaintProperty(
+          `${config.id}-line`,
+          'line-opacity',
+          config.lineOnly ? config.opacity : Math.min(1, config.opacity + 0.24)
+        );
       }
     }
 
@@ -1095,7 +1140,7 @@
 
     function visibleInteractiveLayerIds() {
       return layersConfig
-        .filter((config) => config.visible && map.getLayer(`${config.id}-fill`))
+        .filter((config) => config.visible && config.interactive !== false && map.getLayer(`${config.id}-fill`))
         .map((config) => `${config.id}-fill`);
     }
 
@@ -1282,15 +1327,6 @@
         const collapsed = group.classList.toggle('collapsed');
         button.setAttribute('aria-expanded', String(!collapsed));
       });
-    });
-
-    document.getElementById('home-view').addEventListener('click', () => {
-      map.fitBounds(GUATEMALA_BOUNDS, { padding: 24, duration: 700 });
-    });
-
-    document.getElementById('clear-selection').addEventListener('click', () => {
-      clearSelection();
-      showToast('Selección limpiada.');
     });
 
     document.getElementById('viewer-3d').addEventListener('click', () => {

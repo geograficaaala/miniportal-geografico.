@@ -10,6 +10,15 @@
   <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.3.0/turf.min.js"></script>
 
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+      }
+    }
+  </script>
+
   <style>
     :root {
       --verde-900: #173f2f;
@@ -568,6 +577,159 @@
     .popup-label { color: var(--texto-suave); }
     .popup-value { color: var(--texto); font-weight: 700; overflow-wrap: anywhere; }
 
+    .viewer3d-wrap {
+      position: relative;
+      display: none;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+      background: #e7ece9;
+    }
+
+    .workspace.mode-3d { grid-template-columns: minmax(0, 1fr); }
+    .workspace.mode-3d .layer-panel,
+    .workspace.mode-3d .map-wrap { display: none; }
+    .workspace.mode-3d .viewer3d-wrap { display: block; }
+
+    #viewer3d-canvas {
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+
+    .viewer3d-toolbar {
+      position: absolute;
+      z-index: 4;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      align-items: flex-end;
+      gap: 7px;
+      max-width: calc(100% - 24px);
+      padding: 9px;
+      border: 1px solid rgba(38, 72, 58, 0.2);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: var(--sombra);
+    }
+
+    .viewer3d-field {
+      display: grid;
+      gap: 4px;
+      min-width: min(260px, calc(100vw - 100px));
+    }
+
+    .viewer3d-field label {
+      color: var(--texto-suave);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    .viewer3d-field select {
+      width: 100%;
+      min-height: 31px;
+      padding: 5px 28px 5px 9px;
+      color: var(--texto);
+      border: 1px solid #cbd4cf;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .viewer3d-field select:focus-visible {
+      outline: 2px solid #88a99a;
+      outline-offset: 1px;
+    }
+
+    .viewer3d-reset {
+      flex: 0 0 auto;
+      min-height: 31px;
+      padding: 5px 9px;
+      color: #385247;
+      border: 1px solid #cbd4cf;
+      border-radius: 4px;
+      background: #fff;
+      cursor: pointer;
+    }
+
+    .viewer3d-reset:hover,
+    .viewer3d-reset:focus-visible {
+      color: var(--verde-900);
+      border-color: #9fc7ad;
+      background: var(--verde-100);
+    }
+
+    .viewer3d-reset:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    .viewer3d-status {
+      position: absolute;
+      z-index: 3;
+      top: 50%;
+      left: 50%;
+      width: min(360px, calc(100% - 32px));
+      padding: 16px;
+      color: var(--texto);
+      border: 1px solid rgba(38, 72, 58, 0.18);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: var(--sombra);
+      text-align: center;
+      transform: translate(-50%, -50%);
+    }
+
+    .viewer3d-status.hidden { display: none; }
+
+    .viewer3d-status-title {
+      margin: 0 0 5px;
+      color: var(--azul-900);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .viewer3d-status-text {
+      margin: 0;
+      color: var(--texto-suave);
+      line-height: 1.4;
+    }
+
+    .viewer3d-progress {
+      height: 7px;
+      margin-top: 12px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: #dfe6e2;
+    }
+
+    .viewer3d-progress-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--verde-700);
+      transition: width 0.2s ease;
+    }
+
+    .viewer3d-help {
+      position: absolute;
+      z-index: 3;
+      right: 12px;
+      bottom: 12px;
+      padding: 7px 9px;
+      color: #40564d;
+      border: 1px solid rgba(38, 72, 58, 0.18);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: var(--sombra);
+      pointer-events: none;
+    }
+
     .mobile-panel-button { display: none; }
 
     .mobile-layers-button {
@@ -599,6 +761,19 @@
       .mobile-layers-button { display: inline-flex; }
 
       .workspace { grid-template-columns: minmax(0, 1fr); }
+
+      .viewer3d-toolbar {
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        align-items: stretch;
+        flex-direction: column;
+        max-width: none;
+      }
+
+      .viewer3d-field { min-width: 0; }
+      .viewer3d-reset { width: 100%; }
+      .viewer3d-help { right: 10px; bottom: 10px; left: 10px; text-align: center; }
 
       .layer-panel {
         position: absolute;
@@ -645,18 +820,18 @@
   <div class="app">
     <header class="topbar">
       <nav class="toolbar" aria-label="Modos de visualización">
-        <button class="chip active" type="button" aria-current="page" title="Mapa 2D">
+        <button class="chip active" id="map-2d" type="button" aria-current="page" title="Mapa 2D">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"/><path d="M9 3v15M15 6v15"/></svg>
           <span class="chip-label">Mapa 2D</span>
         </button>
-        <button class="chip pending" id="viewer-3d" type="button" title="Visor 3D: próxima etapa">
+        <button class="chip" id="viewer-3d" type="button" title="Visor 3D">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2.7 8 4.6v9.3l-8 4.7-8-4.7V7.3l8-4.6Z"/><path d="m4.3 7.5 7.7 4.4 7.7-4.4M12 12v9"/></svg>
           <span class="chip-label">Visor 3D</span>
         </button>
       </nav>
     </header>
 
-    <main class="workspace" id="workspace">
+    <main class="workspace mode-2d" id="workspace">
       <aside class="layer-panel" id="layer-panel" aria-label="Tabla de contenido">
         <div class="panel-heading">
           <div>
@@ -700,6 +875,33 @@
           <span>Inicializando el mapa…</span>
         </div>
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </section>
+
+      <section class="viewer3d-wrap" id="viewer3d-wrap" aria-label="Visor tridimensional">
+        <canvas id="viewer3d-canvas" aria-label="Modelo tridimensional interactivo"></canvas>
+
+        <div class="viewer3d-toolbar">
+          <div class="viewer3d-field">
+            <label for="model-selector">Modelo de vertiente</label>
+            <select id="model-selector">
+              <option value="">Seleccione un modelo</option>
+              <option value="pacifico">Vertiente del Pacífico</option>
+              <option value="caribe">Vertiente del Caribe</option>
+              <option value="mexico">Vertiente del Golfo de México</option>
+            </select>
+          </div>
+          <button class="viewer3d-reset" id="reset-3d-view" type="button" disabled>Restablecer vista</button>
+        </div>
+
+        <div class="viewer3d-status" id="viewer3d-status" aria-live="polite">
+          <p class="viewer3d-status-title" id="viewer3d-status-title">Visor 3D</p>
+          <p class="viewer3d-status-text" id="viewer3d-status-text">Seleccione una vertiente para cargar su modelo.</p>
+          <div class="viewer3d-progress" id="viewer3d-progress" hidden>
+            <div class="viewer3d-progress-bar" id="viewer3d-progress-bar"></div>
+          </div>
+        </div>
+
+        <div class="viewer3d-help">Arrastre para rotar · Rueda para acercar · Clic derecho para mover</div>
       </section>
     </main>
 
@@ -898,6 +1100,7 @@
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-right');
+    window.geoportalMap = map;
 
     function icon(name) {
       const icons = {
@@ -1329,10 +1532,6 @@
       });
     });
 
-    document.getElementById('viewer-3d').addEventListener('click', () => {
-      showToast('El visor 3D se habilitará cuando se incorporen los tres modelos GLB/GLTF.');
-    });
-
     document.getElementById('toggle-panel').addEventListener('click', () => {
       document.getElementById('workspace').classList.toggle('panel-open');
     });
@@ -1408,6 +1607,345 @@
     map.on('error', (event) => {
       console.warn('MapLibre:', event.error || event);
     });
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    const MODEL_CONFIG = {
+      pacifico: {
+        name: 'Vertiente del Pacífico',
+        paths: [
+          './modelos3d/pacifico/pacifico.gltf',
+          './modelos3d_recomendados/pacifico/pacifico.gltf',
+          './pacifico/pacifico.gltf',
+          './pacifico.gltf'
+        ]
+      },
+      caribe: {
+        name: 'Vertiente del Caribe',
+        paths: [
+          './modelos3d/caribe/caribe.gltf',
+          './modelos3d_recomendados/caribe/caribe.gltf',
+          './caribe/caribe.gltf',
+          './caribe.gltf'
+        ]
+      },
+      mexico: {
+        name: 'Vertiente del Golfo de México',
+        paths: [
+          './modelos3d/mexico/mexico.gltf',
+          './modelos3d_recomendados/mexico/mexico.gltf',
+          './mexico/mexico.gltf',
+          './mexico.gltf'
+        ]
+      }
+    };
+
+    const workspace = document.getElementById('workspace');
+    const mapButton = document.getElementById('map-2d');
+    const viewerButton = document.getElementById('viewer-3d');
+    const viewerWrap = document.getElementById('viewer3d-wrap');
+    const canvas = document.getElementById('viewer3d-canvas');
+    const selector = document.getElementById('model-selector');
+    const resetButton = document.getElementById('reset-3d-view');
+    const statusBox = document.getElementById('viewer3d-status');
+    const statusTitle = document.getElementById('viewer3d-status-title');
+    const statusText = document.getElementById('viewer3d-status-text');
+    const progress = document.getElementById('viewer3d-progress');
+    const progressBar = document.getElementById('viewer3d-progress-bar');
+
+    let renderer = null;
+    let scene = null;
+    let camera = null;
+    let controls = null;
+    let currentModel = null;
+    let currentModelKey = '';
+    let initialView = null;
+    let viewerReady = false;
+    let loading = false;
+
+    function setMode(mode) {
+      const is3d = mode === '3d';
+      workspace.classList.toggle('mode-3d', is3d);
+      workspace.classList.toggle('mode-2d', !is3d);
+      workspace.classList.remove('panel-open');
+
+      mapButton.classList.toggle('active', !is3d);
+      viewerButton.classList.toggle('active', is3d);
+      if (is3d) {
+        viewerButton.setAttribute('aria-current', 'page');
+        mapButton.removeAttribute('aria-current');
+      } else {
+        mapButton.setAttribute('aria-current', 'page');
+        viewerButton.removeAttribute('aria-current');
+      }
+
+      if (is3d) {
+        initializeViewer();
+        requestAnimationFrame(resizeViewer);
+      } else {
+        requestAnimationFrame(() => window.geoportalMap?.resize());
+      }
+    }
+
+    function initializeViewer() {
+      if (viewerReady) return;
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xe7ece9);
+
+      camera = new THREE.PerspectiveCamera(42, 1, 0.1, 5000);
+      camera.position.set(150, 110, 180);
+
+      controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.screenSpacePanning = true;
+      controls.target.set(0, 20, 0);
+      controls.update();
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x617068, 2.15));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 2.4);
+      keyLight.position.set(180, 260, 150);
+      scene.add(keyLight);
+      const fillLight = new THREE.DirectionalLight(0xdde9ff, 1.15);
+      fillLight.position.set(-170, 100, -130);
+      scene.add(fillLight);
+
+      const grid = new THREE.GridHelper(360, 18, 0x8b9992, 0xc7d0cb);
+      grid.material.transparent = true;
+      grid.material.opacity = 0.32;
+      grid.position.y = -0.3;
+      scene.add(grid);
+
+      viewerReady = true;
+      resizeViewer();
+      animate();
+    }
+
+    function resizeViewer() {
+      if (!renderer || !camera) return;
+      const width = viewerWrap.clientWidth;
+      const height = viewerWrap.clientHeight;
+      if (width < 2 || height < 2) return;
+      renderer.setSize(width, height, false);
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (!renderer || !scene || !camera || !workspace.classList.contains('mode-3d')) return;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    function showStatus(title, text, showProgress = false) {
+      statusTitle.textContent = title;
+      statusText.textContent = text;
+      progress.hidden = !showProgress;
+      if (!showProgress) progressBar.style.width = '0%';
+      statusBox.classList.remove('hidden');
+    }
+
+    function hideStatus() {
+      statusBox.classList.add('hidden');
+      progress.hidden = true;
+    }
+
+    function updateProgress(itemsLoaded, itemsTotal) {
+      const total = Math.max(itemsTotal, 1);
+      const percent = Math.min(96, Math.round((itemsLoaded / total) * 100));
+      progressBar.style.width = `${percent}%`;
+      statusText.textContent = `Cargando recursos ${itemsLoaded} de ${itemsTotal}…`;
+    }
+
+    function disposeCurrentModel() {
+      if (!currentModel) return;
+      scene.remove(currentModel);
+      const textures = new Set();
+      const materials = new Set();
+      currentModel.traverse((object) => {
+        if (!object.isMesh) return;
+        object.geometry?.dispose();
+        const list = Array.isArray(object.material) ? object.material : [object.material];
+        list.filter(Boolean).forEach((material) => {
+          materials.add(material);
+          Object.values(material).forEach((value) => {
+            if (value?.isTexture) textures.add(value);
+          });
+        });
+      });
+      textures.forEach((texture) => texture.dispose());
+      materials.forEach((material) => material.dispose());
+      currentModel = null;
+      currentModelKey = '';
+      initialView = null;
+      resetButton.disabled = true;
+    }
+
+    function prepareModel(model) {
+      model.updateWorldMatrix(true, true);
+      let box = new THREE.Box3().setFromObject(model);
+      if (box.isEmpty()) throw new Error('El modelo no contiene geometría visible.');
+
+      const size = box.getSize(new THREE.Vector3());
+      const largestDimension = Math.max(size.x, size.y, size.z);
+      if (!Number.isFinite(largestDimension) || largestDimension <= 0) {
+        throw new Error('Las dimensiones del modelo no son válidas.');
+      }
+
+      const scale = 170 / largestDimension;
+      model.scale.multiplyScalar(scale);
+      model.updateWorldMatrix(true, true);
+
+      box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.x -= center.x;
+      model.position.z -= center.z;
+      model.position.y -= box.min.y;
+      model.updateWorldMatrix(true, true);
+
+      model.traverse((object) => {
+        if (!object.isMesh) return;
+        object.frustumCulled = true;
+        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        materials.filter(Boolean).forEach((material) => {
+          if (material.map) material.map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          material.needsUpdate = true;
+        });
+      });
+
+      return new THREE.Box3().setFromObject(model);
+    }
+
+    function fitCameraToModel(box) {
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      const radius = Math.max(size.length() * 0.5, 1);
+      const fov = THREE.MathUtils.degToRad(camera.fov);
+      const distance = (radius / Math.sin(fov / 2)) * 1.12;
+      const direction = new THREE.Vector3(1.15, 0.82, 1.35).normalize();
+
+      controls.target.copy(center);
+      camera.position.copy(center).add(direction.multiplyScalar(distance));
+      camera.near = Math.max(distance / 1000, 0.05);
+      camera.far = Math.max(distance * 20, 2000);
+      camera.updateProjectionMatrix();
+
+      controls.minDistance = Math.max(radius * 0.16, 0.2);
+      controls.maxDistance = radius * 12;
+      controls.update();
+
+      initialView = {
+        position: camera.position.clone(),
+        target: controls.target.clone(),
+        near: camera.near,
+        far: camera.far
+      };
+      resetButton.disabled = false;
+    }
+
+    function resetView() {
+      if (!initialView || !camera || !controls) return;
+      camera.position.copy(initialView.position);
+      camera.near = initialView.near;
+      camera.far = initialView.far;
+      camera.updateProjectionMatrix();
+      controls.target.copy(initialView.target);
+      controls.update();
+    }
+
+    function loadFromPath(path) {
+      return new Promise((resolve, reject) => {
+        const manager = new THREE.LoadingManager();
+        manager.onProgress = (_url, itemsLoaded, itemsTotal) => updateProgress(itemsLoaded, itemsTotal);
+        const loader = new GLTFLoader(manager);
+        loader.load(path, resolve, undefined, reject);
+      });
+    }
+
+    async function loadModel(modelKey) {
+      if (!modelKey || loading) return;
+      if (currentModelKey === modelKey && currentModel) {
+        resetView();
+        return;
+      }
+
+      initializeViewer();
+      loading = true;
+      selector.disabled = true;
+      resetButton.disabled = true;
+      const config = MODEL_CONFIG[modelKey];
+      showStatus(config.name, 'Preparando descarga del modelo…', true);
+      progressBar.style.width = '4%';
+
+      let gltf = null;
+      let lastError = null;
+      let usedPath = '';
+
+      for (const path of config.paths) {
+        try {
+          statusText.textContent = `Buscando ${path}…`;
+          gltf = await loadFromPath(path);
+          usedPath = path;
+          break;
+        } catch (error) {
+          lastError = error;
+          console.warn(`No se encontró el modelo en ${path}`, error);
+        }
+      }
+
+      if (!gltf) {
+        loading = false;
+        selector.disabled = false;
+        showStatus(
+          'No se pudo cargar el modelo',
+          `Revise que la carpeta y los tres archivos del modelo estén juntos. Ruta esperada principal: ${config.paths[0]}`,
+          false
+        );
+        console.error('Error final al cargar modelo 3D', lastError);
+        return;
+      }
+
+      try {
+        disposeCurrentModel();
+        currentModel = gltf.scene;
+        currentModel.name = config.name;
+        const box = prepareModel(currentModel);
+        scene.add(currentModel);
+        currentModelKey = modelKey;
+        fitCameraToModel(box);
+        progressBar.style.width = '100%';
+        statusText.textContent = `Modelo cargado desde ${usedPath}`;
+        setTimeout(hideStatus, 350);
+      } catch (error) {
+        disposeCurrentModel();
+        showStatus('Error al preparar el modelo', error.message || 'El modelo no pudo visualizarse.', false);
+        console.error(error);
+      } finally {
+        loading = false;
+        selector.disabled = false;
+      }
+    }
+
+    mapButton.addEventListener('click', () => setMode('2d'));
+    viewerButton.addEventListener('click', () => setMode('3d'));
+    selector.addEventListener('change', () => loadModel(selector.value));
+    resetButton.addEventListener('click', resetView);
+    window.addEventListener('resize', resizeViewer);
+
+    const resizeObserver = new ResizeObserver(resizeViewer);
+    resizeObserver.observe(viewerWrap);
   </script>
 </body>
 </html>

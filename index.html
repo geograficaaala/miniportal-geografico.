@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="description" content="Mini geoportal temático de Guatemala con capas de hidrografía y conservación.">
+  <title>Mini Geoportal Geográfico</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.3.0/turf.min.js"></script>
+
+  <style>
+    :root {
+      --verde-900: #173f2f;
+      --verde-800: #20513d;
+      --verde-700: #3c8a5b;
+      --verde-100: #edf6f0;
+      --azul-900: #142a4f;
+      --azul-800: #1c3966;
+      --dorado: #b99643;
+      --texto: #26332d;
+      --texto-suave: #66736d;
+      --borde: #d8dfdb;
+      --fondo: #f3f5f4;
+      --blanco: #ffffff;
+      --sombra: 0 2px 10px rgba(21, 55, 42, 0.14);
+      --alto-cabecera: 64px;
+      --alto-pie: 30px;
+      --ancho-panel: 318px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      color: var(--texto);
+      background: var(--fondo);
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    button { color: inherit; }
+
+    .app {
+      display: grid;
+      grid-template-rows: var(--alto-cabecera) minmax(0, 1fr) var(--alto-pie);
+      width: 100%;
+      height: 100%;
+    }
+
+    .topbar {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-width: 0;
+      padding: 0 16px;
+      color: var(--azul-900);
+      background: #fff;
+      border-bottom: 1px solid #d8dfe3;
+      box-shadow: 0 2px 8px rgba(20, 42, 79, 0.13);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      flex: 0 0 38px;
+      width: 38px;
+      height: 38px;
+      color: #fff;
+      border: 1px solid #d5e2dc;
+      border-radius: 50%;
+      background: linear-gradient(145deg, var(--azul-800), var(--verde-700));
+    }
+
+    .brand-mark svg { width: 23px; height: 23px; }
+
+    .brand-copy { min-width: 0; }
+
+    .brand-title {
+      margin: 0 0 2px;
+      overflow: hidden;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1.1;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .brand-subtitle {
+      margin: 0;
+      color: #75817b;
+      font-size: 11px;
+      letter-spacing: 0.15px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 6px 10px;
+      color: #32465a;
+      border: 1px solid #d2d9dd;
+      border-radius: 16px;
+      background: #fff;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .chip:hover,
+    .chip:focus-visible {
+      color: var(--verde-900);
+      background: var(--verde-100);
+      border-color: #9fc7ad;
+    }
+
+    .chip.active {
+      color: #fff;
+      border-color: var(--verde-700);
+      background: var(--verde-700);
+      font-weight: 700;
+    }
+
+    .chip.pending { opacity: 0.78; }
+    .chip svg { width: 15px; height: 15px; }
+
+    .workspace {
+      position: relative;
+      display: grid;
+      grid-template-columns: var(--ancho-panel) minmax(0, 1fr);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .layer-panel {
+      position: relative;
+      z-index: 10;
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      background: var(--blanco);
+      border-right: 1px solid #cbd4cf;
+      box-shadow: 2px 0 8px rgba(28, 55, 43, 0.1);
+      scrollbar-width: thin;
+    }
+
+    .panel-heading {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 14px 11px;
+      color: #fff;
+      background: var(--azul-900);
+      border-bottom: 1px solid #0e203d;
+    }
+
+    .panel-heading h2 {
+      margin: 0;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .panel-heading small {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 10px;
+    }
+
+    .layer-group {
+      border-bottom: 1px solid var(--borde);
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 38px;
+      padding: 9px 13px;
+      color: #344a5e;
+      border: 0;
+      background: #fff;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .group-title:hover { color: var(--verde-900); background: #f2f7f4; }
+
+    .group-title svg {
+      width: 14px;
+      height: 14px;
+      margin-right: 8px;
+      transition: transform 0.15s ease;
+    }
+
+    .layer-group.collapsed .group-title svg { transform: rotate(-90deg); }
+    .layer-group.collapsed .group-content { display: none; }
+
+    .layer-item {
+      padding: 10px 12px 9px;
+      border-top: 1px solid #edf0ee;
+      background: #fff;
+    }
+
+    .layer-item:first-child { border-top: 0; }
+
+    .layer-main {
+      display: grid;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .visibility-toggle {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .visibility-toggle input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .checkmark {
+      display: grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      color: #fff;
+      border: 1px solid #819087;
+      border-radius: 3px;
+      background: #fff;
+      transition: 0.15s ease;
+    }
+
+    .checkmark svg {
+      width: 11px;
+      height: 11px;
+      opacity: 0;
+    }
+
+    .visibility-toggle input:checked + .checkmark {
+      border-color: var(--verde-700);
+      background: var(--verde-700);
+    }
+
+    .visibility-toggle input:checked + .checkmark svg { opacity: 1; }
+    .visibility-toggle input:focus-visible + .checkmark { outline: 2px solid #88a99a; outline-offset: 2px; }
+
+    .layer-name {
+      min-width: 0;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .layer-status {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 2px;
+      color: var(--texto-suave);
+      font-size: 10px;
+      font-weight: 400;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #a5afa9;
+    }
+
+    .status-dot.loading {
+      background: var(--dorado);
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .status-dot.ready { background: #4e8a68; }
+    .status-dot.error { background: #a84d43; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 1; }
+    }
+
+    .layer-actions {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .icon-button {
+      display: inline-grid;
+      place-items: center;
+      width: 27px;
+      height: 27px;
+      padding: 0;
+      color: #496158;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .icon-button:hover,
+    .icon-button:focus-visible {
+      color: var(--verde-900);
+      border-color: #cbd7d0;
+      background: var(--verde-100);
+    }
+
+    .icon-button svg { width: 15px; height: 15px; }
+
+    .layer-options {
+      margin: 8px 0 0 27px;
+      padding-top: 8px;
+      border-top: 1px dashed #d9dfdb;
+    }
+
+    .opacity-row {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) 34px;
+      align-items: center;
+      gap: 8px;
+      color: var(--texto-suave);
+      font-size: 11px;
+    }
+
+    .opacity-row input[type="range"] {
+      width: 100%;
+      accent-color: var(--verde-700);
+      cursor: pointer;
+    }
+
+    .opacity-value {
+      color: var(--texto);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .legend {
+      display: none;
+      margin-top: 9px;
+      padding: 8px;
+      border: 1px solid #e1e6e3;
+      border-radius: 4px;
+      background: #f9faf9;
+    }
+
+    .legend.open { display: block; }
+
+    .legend-title {
+      margin-bottom: 6px;
+      color: var(--texto-suave);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+    }
+
+    .legend-item {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 7px;
+      min-height: 21px;
+      line-height: 1.2;
+    }
+
+    .legend-swatch {
+      width: 16px;
+      height: 12px;
+      border: 1px solid rgba(24, 52, 40, 0.42);
+      border-radius: 2px;
+    }
+
+    .map-wrap {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background: #dfe6e2;
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+    }
+
+    .map-badge {
+      position: absolute;
+      z-index: 3;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      max-width: calc(100% - 90px);
+      min-height: 30px;
+      padding: 7px 10px;
+      color: var(--verde-900);
+      border: 1px solid rgba(38, 72, 58, 0.2);
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: var(--sombra);
+      pointer-events: none;
+    }
+
+    .map-badge svg { flex: 0 0 14px; width: 14px; height: 14px; }
+
+    .toast {
+      position: absolute;
+      z-index: 5;
+      left: 50%;
+      bottom: 18px;
+      max-width: min(420px, calc(100% - 30px));
+      padding: 9px 13px;
+      color: #fff;
+      border-radius: 4px;
+      background: rgba(23, 63, 47, 0.94);
+      box-shadow: var(--sombra);
+      opacity: 0;
+      transform: translate(-50%, 10px);
+      transition: 0.2s ease;
+      pointer-events: none;
+    }
+
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { background: rgba(135, 55, 47, 0.96); }
+
+    .footer {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      padding: 0 12px;
+      color: #dbe7e1;
+      background: var(--azul-900);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .footer-attribution {
+      min-width: 0;
+      overflow: hidden;
+      color: rgba(255, 255, 255, 0.68);
+      text-overflow: ellipsis;
+    }
+
+    .footer-author {
+      color: #fff;
+      font-weight: 700;
+    }
+
+    .maplibregl-ctrl-top-right { top: 4px; right: 4px; }
+
+    .maplibregl-ctrl-group {
+      overflow: hidden;
+      border: 1px solid rgba(38, 72, 58, 0.2) !important;
+      border-radius: 4px !important;
+      box-shadow: var(--sombra) !important;
+    }
+
+    .maplibregl-ctrl-group button { width: 30px; height: 30px; }
+    .maplibregl-ctrl-attrib { display: none; }
+
+    .maplibregl-popup { max-width: 310px !important; }
+
+    .maplibregl-popup-content {
+      min-width: 250px;
+      padding: 0;
+      overflow: hidden;
+      border: 1px solid rgba(30, 68, 51, 0.25);
+      border-radius: 5px;
+      box-shadow: 0 4px 18px rgba(19, 48, 36, 0.22);
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+    }
+
+    .maplibregl-popup-close-button {
+      z-index: 2;
+      width: 27px;
+      height: 27px;
+      color: #fff;
+      font-size: 20px;
+      line-height: 25px;
+    }
+
+    .maplibregl-popup-close-button:hover { background: rgba(255, 255, 255, 0.14); }
+
+    .popup-header {
+      padding: 11px 34px 10px 12px;
+      color: #fff;
+      background: var(--verde-800);
+      border-bottom: 3px solid var(--dorado);
+    }
+
+    .popup-kicker {
+      margin-bottom: 3px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.45px;
+    }
+
+    .popup-title {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .popup-body { padding: 9px 12px 11px; background: #fff; }
+
+    .popup-row {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid #edf0ee;
+      line-height: 1.25;
+    }
+
+    .popup-row:last-child { border-bottom: 0; }
+    .popup-label { color: var(--texto-suave); }
+    .popup-value { color: var(--texto); font-weight: 700; overflow-wrap: anywhere; }
+
+    .mobile-panel-button { display: none; }
+
+    @media (max-width: 760px) {
+      :root { --alto-cabecera: 58px; --alto-pie: 42px; }
+
+      .topbar { padding: 0 10px; gap: 8px; }
+      .brand-mark { width: 34px; height: 34px; flex-basis: 34px; }
+      .brand-title { font-size: 14px; }
+      .brand-subtitle { display: none; }
+      .chip-label { display: none; }
+      .chip { width: 32px; min-height: 32px; padding: 6px; }
+      .mobile-panel-button { display: inline-flex; }
+
+      .workspace { grid-template-columns: minmax(0, 1fr); }
+
+      .layer-panel {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 12;
+        width: min(88vw, 330px);
+        transform: translateX(-104%);
+        transition: transform 0.2s ease;
+      }
+
+      .workspace.panel-open .layer-panel { transform: translateX(0); }
+
+      .workspace::after {
+        position: absolute;
+        inset: 0;
+        z-index: 11;
+        content: "";
+        visibility: hidden;
+        background: rgba(9, 25, 18, 0.35);
+        opacity: 0;
+        transition: 0.2s ease;
+      }
+
+      .workspace.panel-open::after { visibility: visible; opacity: 1; }
+      .map-badge { left: 10px; top: 10px; }
+
+      .footer {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
+        gap: 2px;
+        padding: 4px 9px;
+        white-space: normal;
+      }
+
+      .footer-author { font-size: 10px; }
+      .footer-attribution { font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 19c5.8.2 11.4-3.8 14.8-11.8-6.7-.6-12.2 2.1-14.2 7.2C4 16 3.9 17.5 4 19Z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M5 18c3.3-3 6.6-5.1 10.4-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <h1 class="brand-title">Mini Geoportal Geográfico</h1>
+          <p class="brand-subtitle">Información temática de recursos naturales de Guatemala</p>
+        </div>
+      </div>
+
+      <nav class="toolbar" aria-label="Herramientas principales">
+        <button class="chip mobile-panel-button" id="toggle-panel" type="button" title="Mostrar capas" aria-label="Mostrar capas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 8 4-8 4-8-4 8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/></svg>
+          <span class="chip-label">Capas</span>
+        </button>
+        <button class="chip active" type="button" aria-current="page" title="Mapa 2D">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z"/><path d="M9 3v15M15 6v15"/></svg>
+          <span class="chip-label">Mapa 2D</span>
+        </button>
+        <button class="chip pending" id="viewer-3d" type="button" title="Visor 3D: próxima etapa">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 2.7 8 4.6v9.3l-8 4.7-8-4.7V7.3l8-4.6Z"/><path d="m4.3 7.5 7.7 4.4 7.7-4.4M12 12v9"/></svg>
+          <span class="chip-label">Visor 3D</span>
+        </button>
+        <button class="chip" id="home-view" type="button" title="Vista inicial">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m3 11 9-8 9 8"/><path d="M5 10v10h14V10M9 20v-6h6v6"/></svg>
+          <span class="chip-label">Vista inicial</span>
+        </button>
+        <button class="chip" id="clear-selection" type="button" title="Limpiar selección">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4 4 16 16M20 4 4 20"/></svg>
+          <span class="chip-label">Limpiar</span>
+        </button>
+      </nav>
+    </header>
+
+    <main class="workspace" id="workspace">
+      <aside class="layer-panel" id="layer-panel" aria-label="Tabla de contenido">
+        <div class="panel-heading">
+          <div>
+            <h2>Contenido del mapa</h2>
+            <small>Capas temáticas</small>
+          </div>
+        </div>
+
+        <section class="layer-group" data-group="hidrografia">
+          <button class="group-title" type="button" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            Hidrografía
+          </button>
+          <div class="group-content" id="group-hidrografia"></div>
+        </section>
+
+        <section class="layer-group" data-group="conservacion">
+          <button class="group-title" type="button" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+            Conservación
+          </button>
+          <div class="group-content" id="group-conservacion"></div>
+        </section>
+      </aside>
+
+      <section class="map-wrap" aria-label="Mapa interactivo">
+        <div id="map"></div>
+        <div class="map-badge" id="map-status" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/></svg>
+          <span>Inicializando el mapa…</span>
+        </div>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-attribution">Mapa base © OpenStreetMap contributors © CARTO</div>
+      <div class="footer-author">Autor: Ing. Agroforestal Rafael Tzoc Jérez</div>
+    </footer>
+  </div>
+
+  <script>
+    'use strict';
+
+    const GUATEMALA_BOUNDS = [[-92.35, 13.55], [-88.05, 17.95]];
+    const NONE_FILTER = ['==', ['literal', 1], ['literal', 0]];
+
+    const layersConfig = [
+      {
+        id: 'vertientes',
+        name: 'Vertientes',
+        group: 'hidrografia',
+        file: './Vertientes.geojson',
+        visible: false,
+        opacity: 0.34,
+        selectField: 'VERTIENTE',
+        fillColor: ['match', ['get', 'VERTIENTE'],
+          'Vertiente del Pacífico', '#d4a373',
+          'Vertiente del Caribe', '#66a6a0',
+          'Vertiente del Golfo de México', '#8d7db5',
+          '#aab5af'
+        ],
+        lineColor: '#40564d',
+        legend: [
+          ['Vertiente del Pacífico', '#d4a373'],
+          ['Vertiente del Caribe', '#66a6a0'],
+          ['Vertiente del Golfo de México', '#8d7db5']
+        ]
+      },
+      {
+        id: 'cuencas',
+        name: 'Cuencas de Guatemala',
+        group: 'hidrografia',
+        file: './Cuencas_de_guatemala.geojson',
+        visible: false,
+        opacity: 0.38,
+        selectField: 'CUENCA',
+        fillColor: ['match', ['get', 'VERTIENTE'],
+          'Vertiente del Pacífico', '#e9b97b',
+          'Vertiente del Caribe', '#5faeb3',
+          'Vertiente del Golfo de México', '#9b8ac6',
+          '#b8c1bc'
+        ],
+        lineColor: '#536a61',
+        legend: [
+          ['Pacífico', '#e9b97b'],
+          ['Caribe', '#5faeb3'],
+          ['Golfo de México', '#9b8ac6']
+        ]
+      },
+      {
+        id: 'cuerpos-agua',
+        name: 'Cuerpos de agua',
+        group: 'hidrografia',
+        file: './Cuerpos_agua.geojson',
+        visible: true,
+        opacity: 0.72,
+        selectField: null,
+        fillColor: ['match', ['get', 'clase'],
+          'Lagos y Lagunas', '#247ba0',
+          'Sujetos a Inundación', '#8ecae6',
+          'Islotes', '#c2dfe3',
+          'Márgenes de Ríos', '#4ea8de',
+          'Manglar', '#2a9d8f',
+          'Pantano', '#6c9a8b',
+          'Sin cuerpos de agua', '#b9c5c1',
+          '#7aa6b2'
+        ],
+        lineColor: '#1f6177',
+        legend: [
+          ['Lagos y lagunas', '#247ba0'],
+          ['Áreas sujetas a inundación', '#8ecae6'],
+          ['Islotes', '#c2dfe3'],
+          ['Márgenes de ríos', '#4ea8de'],
+          ['Manglar', '#2a9d8f'],
+          ['Pantano', '#6c9a8b'],
+          ['Sin cuerpos de agua', '#b9c5c1']
+        ]
+      },
+      {
+        id: 'areas-protegidas',
+        name: 'Áreas protegidas',
+        group: 'conservacion',
+        file: './areas_protegidas.geojson',
+        visible: true,
+        opacity: 0.58,
+        selectField: 'NOMBRE',
+        fillColor: ['match', ['coalesce', ['get', 'TIP_CAT'], 'Sin Categoría'],
+          'Tipo I', '#1b5e20',
+          'Tipo II', '#2e7d32',
+          'Tipo III', '#558b2f',
+          'Tipo IV', '#7cb342',
+          'Tipo V', '#9e9d24',
+          'Tipo VI', '#8d6e63',
+          'Sin Categoría', '#78909c',
+          '#9aa5a0'
+        ],
+        lineColor: '#294c36',
+        legend: [
+          ['Tipo I', '#1b5e20'],
+          ['Tipo II', '#2e7d32'],
+          ['Tipo III', '#558b2f'],
+          ['Tipo IV', '#7cb342'],
+          ['Tipo V', '#9e9d24'],
+          ['Tipo VI', '#8d6e63'],
+          ['Sin categoría', '#78909c']
+        ]
+      }
+    ];
+
+    const state = {
+      loadedData: new Map(),
+      loading: new Map(),
+      bbox: new Map(),
+      hovered: null,
+      selected: null,
+      popup: null,
+      toastTimer: null
+    };
+
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          'carto-light': {
+            type: 'raster',
+            tiles: [
+              'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+              'https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+              'https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+              'https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '© OpenStreetMap contributors © CARTO'
+          }
+        },
+        layers: [
+          {
+            id: 'carto-light-layer',
+            type: 'raster',
+            source: 'carto-light',
+            minzoom: 0,
+            maxzoom: 20
+          }
+        ]
+      },
+      bounds: GUATEMALA_BOUNDS,
+      fitBoundsOptions: { padding: 24 },
+      minZoom: 5,
+      maxZoom: 17,
+      maxBounds: [[-94.5, 11.5], [-85.5, 20.2]],
+      attributionControl: false,
+      maplibreLogo: false
+    });
+
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    map.addControl(new maplibregl.ScaleControl({ maxWidth: 110, unit: 'metric' }), 'bottom-right');
+
+    function icon(name) {
+      const icons = {
+        check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 4 4L19 6"/></svg>',
+        zoom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4M11 8v6M8 11h6"/></svg>',
+        legend: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h3v3H4zM4 15h3v3H4zM10 7.5h10M10 16.5h10"/></svg>'
+      };
+      return icons[name] || '';
+    }
+
+    function renderLayerControls() {
+      layersConfig.forEach((config) => {
+        const host = document.getElementById(`group-${config.group}`);
+        const item = document.createElement('article');
+        item.className = 'layer-item';
+        item.dataset.layerId = config.id;
+
+        item.innerHTML = `
+          <div class="layer-main">
+            <label class="visibility-toggle" title="Encender o apagar ${escapeHtml(config.name)}">
+              <input type="checkbox" class="layer-visibility" ${config.visible ? 'checked' : ''} aria-label="Mostrar ${escapeHtml(config.name)}">
+              <span class="checkmark">${icon('check')}</span>
+            </label>
+            <div>
+              <div class="layer-name">${escapeHtml(config.name)}</div>
+              <div class="layer-status">
+                <span class="status-dot"></span>
+                <span class="status-text">Sin cargar</span>
+              </div>
+            </div>
+            <div class="layer-actions">
+              <button class="icon-button layer-zoom" type="button" title="Acercar a ${escapeHtml(config.name)}" aria-label="Acercar a ${escapeHtml(config.name)}">${icon('zoom')}</button>
+              <button class="icon-button layer-legend-toggle" type="button" title="Mostrar leyenda" aria-label="Mostrar leyenda de ${escapeHtml(config.name)}" aria-expanded="false">${icon('legend')}</button>
+            </div>
+          </div>
+          <div class="layer-options">
+            <div class="opacity-row">
+              <label for="opacity-${config.id}">Opacidad</label>
+              <input id="opacity-${config.id}" class="layer-opacity" type="range" min="0" max="100" step="1" value="${Math.round(config.opacity * 100)}">
+              <span class="opacity-value">${Math.round(config.opacity * 100)}%</span>
+            </div>
+            <div class="legend" aria-label="Leyenda de ${escapeHtml(config.name)}">
+              <div class="legend-title">Leyenda</div>
+              ${config.legend.map(([label, color]) => `
+                <div class="legend-item">
+                  <span class="legend-swatch" style="background:${color}"></span>
+                  <span>${escapeHtml(label)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+
+        host.appendChild(item);
+        bindLayerControl(config, item);
+      });
+    }
+
+    function bindLayerControl(config, item) {
+      const visibility = item.querySelector('.layer-visibility');
+      const opacity = item.querySelector('.layer-opacity');
+      const opacityValue = item.querySelector('.opacity-value');
+      const legendToggle = item.querySelector('.layer-legend-toggle');
+      const legend = item.querySelector('.legend');
+      const zoom = item.querySelector('.layer-zoom');
+
+      visibility.addEventListener('change', async () => {
+        config.visible = visibility.checked;
+        if (config.visible) {
+          const ok = await ensureLayer(config);
+          if (!ok) {
+            visibility.checked = false;
+            config.visible = false;
+            return;
+          }
+        }
+        applyVisibility(config);
+      });
+
+      opacity.addEventListener('input', () => {
+        config.opacity = Number(opacity.value) / 100;
+        opacityValue.textContent = `${opacity.value}%`;
+        applyOpacity(config);
+      });
+
+      legendToggle.addEventListener('click', () => {
+        const open = legend.classList.toggle('open');
+        legendToggle.setAttribute('aria-expanded', String(open));
+        legendToggle.title = open ? 'Ocultar leyenda' : 'Mostrar leyenda';
+      });
+
+      zoom.addEventListener('click', async () => {
+        const ok = await ensureLayer(config);
+        if (!ok) return;
+        fitLayer(config);
+      });
+    }
+
+    function updateLayerStatus(config, type, text) {
+      const item = document.querySelector(`[data-layer-id="${config.id}"]`);
+      if (!item) return;
+      const dot = item.querySelector('.status-dot');
+      const label = item.querySelector('.status-text');
+      dot.className = `status-dot ${type || ''}`.trim();
+      label.textContent = text;
+    }
+
+    function opacityExpression(value) {
+      return [
+        'case',
+        ['boolean', ['feature-state', 'hover'], false], Math.min(1, value + 0.18),
+        value
+      ];
+    }
+
+    async function ensureLayer(config) {
+      if (map.getSource(config.id)) return true;
+      if (state.loading.has(config.id)) return state.loading.get(config.id);
+
+      const task = (async () => {
+        updateLayerStatus(config, 'loading', 'Cargando…');
+        setMapStatus(`Cargando ${config.name}…`);
+
+        try {
+          const response = await fetch(config.file);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+
+          state.loadedData.set(config.id, data);
+          map.addSource(config.id, { type: 'geojson', data, generateId: true });
+
+          map.addLayer({
+            id: `${config.id}-fill`,
+            type: 'fill',
+            source: config.id,
+            paint: {
+              'fill-color': config.fillColor,
+              'fill-opacity': opacityExpression(config.opacity),
+              'fill-antialias': true
+            },
+            layout: { visibility: config.visible ? 'visible' : 'none' }
+          });
+
+          map.addLayer({
+            id: `${config.id}-line`,
+            type: 'line',
+            source: config.id,
+            paint: {
+              'line-color': config.lineColor,
+              'line-opacity': Math.min(1, config.opacity + 0.24),
+              'line-width': [
+                'case',
+                ['boolean', ['feature-state', 'hover'], false], 1.8,
+                0.8
+              ]
+            },
+            layout: { visibility: config.visible ? 'visible' : 'none' }
+          });
+
+          map.addLayer({
+            id: `${config.id}-selection`,
+            type: 'line',
+            source: config.id,
+            filter: NONE_FILTER,
+            paint: {
+              'line-color': '#f1b83c',
+              'line-width': 3.2,
+              'line-opacity': 1
+            },
+            layout: { visibility: config.visible ? 'visible' : 'none' }
+          });
+
+          reorderLayers();
+          updateLayerStatus(config, 'ready', `${data.features.length.toLocaleString('es-GT')} elementos`);
+          setMapStatus('Mapa listo. Haga clic sobre una capa para consultar información.');
+          return true;
+        } catch (error) {
+          console.error(`No fue posible cargar ${config.name}`, error);
+          updateLayerStatus(config, 'error', 'Error de carga');
+          setMapStatus(`No se pudo cargar ${config.name}.`);
+          showToast(`No se pudo cargar ${config.name}. Verifique el nombre y la ubicación del GeoJSON.`, true);
+          return false;
+        } finally {
+          state.loading.delete(config.id);
+        }
+      })();
+
+      state.loading.set(config.id, task);
+      return task;
+    }
+
+    function reorderLayers() {
+      layersConfig.forEach((config) => {
+        if (map.getLayer(`${config.id}-fill`)) map.moveLayer(`${config.id}-fill`);
+        if (map.getLayer(`${config.id}-line`)) map.moveLayer(`${config.id}-line`);
+      });
+      layersConfig.forEach((config) => {
+        if (map.getLayer(`${config.id}-selection`)) map.moveLayer(`${config.id}-selection`);
+      });
+    }
+
+    function applyVisibility(config) {
+      const visibility = config.visible ? 'visible' : 'none';
+      [`${config.id}-fill`, `${config.id}-line`, `${config.id}-selection`].forEach((id) => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visibility);
+      });
+      if (!config.visible && state.selected?.configId === config.id) clearSelection();
+    }
+
+    function applyOpacity(config) {
+      if (map.getLayer(`${config.id}-fill`)) {
+        map.setPaintProperty(`${config.id}-fill`, 'fill-opacity', opacityExpression(config.opacity));
+      }
+      if (map.getLayer(`${config.id}-line`)) {
+        map.setPaintProperty(`${config.id}-line`, 'line-opacity', Math.min(1, config.opacity + 0.24));
+      }
+    }
+
+    function fitLayer(config) {
+      const data = state.loadedData.get(config.id);
+      if (!data) return;
+
+      let bbox = state.bbox.get(config.id);
+      if (!bbox) {
+        bbox = turf.bbox(data);
+        state.bbox.set(config.id, bbox);
+      }
+      map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 42, duration: 700, maxZoom: 12 });
+    }
+
+    function visibleInteractiveLayerIds() {
+      return layersConfig
+        .filter((config) => config.visible && map.getLayer(`${config.id}-fill`))
+        .map((config) => `${config.id}-fill`);
+    }
+
+    function configFromLayerId(layerId) {
+      return layersConfig.find((config) => `${config.id}-fill` === layerId);
+    }
+
+    function clearHover() {
+      if (!state.hovered) return;
+      if (map.getSource(state.hovered.source)) {
+        map.setFeatureState({ source: state.hovered.source, id: state.hovered.id }, { hover: false });
+      }
+      state.hovered = null;
+    }
+
+    function setHover(feature, config) {
+      if (feature.id === undefined || feature.id === null) return;
+      if (state.hovered?.source === config.id && state.hovered?.id === feature.id) return;
+      clearHover();
+      state.hovered = { source: config.id, id: feature.id };
+      map.setFeatureState({ source: config.id, id: feature.id }, { hover: true });
+    }
+
+    function setSelection(feature, config) {
+      clearSelection(false);
+
+      const selectionLayer = `${config.id}-selection`;
+      if (!map.getLayer(selectionLayer)) return;
+
+      const rawValue = config.selectField ? feature.properties?.[config.selectField] : null;
+      const hasValue = rawValue !== null && rawValue !== undefined && String(rawValue).trim() !== '';
+      const filter = hasValue
+        ? ['==', ['get', config.selectField], rawValue]
+        : ['==', ['id'], feature.id];
+
+      map.setFilter(selectionLayer, filter);
+      state.selected = { configId: config.id, layerId: selectionLayer };
+    }
+
+    function clearSelection(closePopup = true) {
+      layersConfig.forEach((config) => {
+        const layerId = `${config.id}-selection`;
+        if (map.getLayer(layerId)) map.setFilter(layerId, NONE_FILTER);
+      });
+      state.selected = null;
+      if (closePopup && state.popup) {
+        const popup = state.popup;
+        state.popup = null;
+        popup.remove();
+      }
+    }
+
+    function areaKm2(feature) {
+      try {
+        return turf.area(feature) / 1_000_000;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function popupData(feature, config) {
+      const p = feature.properties || {};
+
+      if (config.id === 'areas-protegidas') {
+        const name = valueOr(p.NOMBRE, 'Área protegida sin nombre');
+        const areaOfficial = parseLocaleNumber(p.AREA_OF);
+        const fallbackArea = Number(p.HECTARES);
+        return {
+          kicker: 'Área protegida',
+          title: name,
+          rows: compactRows([
+            ['Categoría', p.CATE_MAN],
+            ['Tipo', p.TIP_CAT],
+            ['Año de declaración', p['AñO_DECL']],
+            ['Área oficial', areaOfficial !== null ? `${formatNumber(areaOfficial, 2)} ha` : (Number.isFinite(fallbackArea) ? `${formatNumber(fallbackArea, 2)} ha` : null)],
+            ['Departamento', p.DEPARTAMEN],
+            ['Municipio', p.MUNICIPIO],
+            ['Región', p.REG_ADMTVA]
+          ])
+        };
+      }
+
+      if (config.id === 'cuencas') {
+        const km2 = areaKm2(feature);
+        return {
+          kicker: 'Cuenca hidrográfica',
+          title: valueOr(p.CUENCA, 'Cuenca sin nombre'),
+          rows: compactRows([
+            ['Vertiente', p.VERTIENTE],
+            ['Área aproximada', km2 !== null ? `${formatNumber(km2, 2)} km²` : null]
+          ])
+        };
+      }
+
+      if (config.id === 'vertientes') {
+        const km2 = areaKm2(feature);
+        return {
+          kicker: 'Vertiente hidrográfica',
+          title: valueOr(p.VERTIENTE, 'Vertiente sin nombre'),
+          rows: compactRows([
+            ['Área aproximada', km2 !== null ? `${formatNumber(km2, 2)} km²` : null]
+          ])
+        };
+      }
+
+      const areaHa = Number(p.area_ha);
+      return {
+        kicker: 'Cuerpo de agua',
+        title: valueOr(p.clase, 'Elemento hídrico'),
+        rows: compactRows([
+          ['Clase', p.clase],
+          ['Área', Number.isFinite(areaHa) ? `${formatNumber(areaHa, 2)} ha` : null]
+        ])
+      };
+    }
+
+    function popupHtml(data) {
+      return `
+        <div class="popup-header">
+          <div class="popup-kicker">${escapeHtml(data.kicker)}</div>
+          <h3 class="popup-title">${escapeHtml(data.title)}</h3>
+        </div>
+        <div class="popup-body">
+          ${data.rows.map(([label, value]) => `
+            <div class="popup-row">
+              <div class="popup-label">${escapeHtml(label)}</div>
+              <div class="popup-value">${escapeHtml(String(value))}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function compactRows(rows) {
+      return rows.filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '');
+    }
+
+    function valueOr(value, fallback) {
+      return value !== null && value !== undefined && String(value).trim() !== '' ? String(value) : fallback;
+    }
+
+    function parseLocaleNumber(value) {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (value === null || value === undefined) return null;
+      const normalized = String(value).replace(/,/g, '').trim();
+      const number = Number(normalized);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function formatNumber(value, decimals = 2) {
+      return new Intl.NumberFormat('es-GT', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      }).format(value);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function setMapStatus(message) {
+      document.querySelector('#map-status span').textContent = message;
+    }
+
+    function showToast(message, isError = false) {
+      const toast = document.getElementById('toast');
+      clearTimeout(state.toastTimer);
+      toast.textContent = message;
+      toast.classList.toggle('error', isError);
+      toast.classList.add('show');
+      state.toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+    }
+
+    renderLayerControls();
+
+    document.querySelectorAll('.group-title').forEach((button) => {
+      button.addEventListener('click', () => {
+        const group = button.closest('.layer-group');
+        const collapsed = group.classList.toggle('collapsed');
+        button.setAttribute('aria-expanded', String(!collapsed));
+      });
+    });
+
+    document.getElementById('home-view').addEventListener('click', () => {
+      map.fitBounds(GUATEMALA_BOUNDS, { padding: 24, duration: 700 });
+    });
+
+    document.getElementById('clear-selection').addEventListener('click', () => {
+      clearSelection();
+      showToast('Selección limpiada.');
+    });
+
+    document.getElementById('viewer-3d').addEventListener('click', () => {
+      showToast('El visor 3D se habilitará cuando se incorporen los tres modelos GLB/GLTF.');
+    });
+
+    document.getElementById('toggle-panel').addEventListener('click', () => {
+      document.getElementById('workspace').classList.toggle('panel-open');
+    });
+
+    document.getElementById('workspace').addEventListener('click', (event) => {
+      if (window.innerWidth <= 760 && event.target.id === 'workspace') {
+        event.currentTarget.classList.remove('panel-open');
+      }
+    });
+
+    map.on('load', async () => {
+      setMapStatus('Cargando capas temáticas iniciales…');
+      const initialLayers = layersConfig.filter((config) => config.visible);
+      await Promise.all(initialLayers.map(ensureLayer));
+      initialLayers.forEach(applyVisibility);
+      setMapStatus('Mapa listo. Haga clic sobre una capa para consultar información.');
+    });
+
+    map.on('mousemove', (event) => {
+      const layerIds = visibleInteractiveLayerIds();
+      if (!layerIds.length) {
+        clearHover();
+        map.getCanvas().style.cursor = '';
+        return;
+      }
+
+      const features = map.queryRenderedFeatures(event.point, { layers: layerIds });
+      const feature = features[0];
+      if (!feature) {
+        clearHover();
+        map.getCanvas().style.cursor = '';
+        return;
+      }
+
+      const config = configFromLayerId(feature.layer.id);
+      if (!config) return;
+      setHover(feature, config);
+      map.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.on('mouseout', () => {
+      clearHover();
+      map.getCanvas().style.cursor = '';
+    });
+
+    map.on('click', (event) => {
+      const layerIds = visibleInteractiveLayerIds();
+      if (!layerIds.length) return;
+      const features = map.queryRenderedFeatures(event.point, { layers: layerIds });
+      const feature = features[0];
+      if (!feature) return;
+
+      const config = configFromLayerId(feature.layer.id);
+      if (!config) return;
+
+      setSelection(feature, config);
+      const data = popupData(feature, config);
+
+      if (state.popup) state.popup.remove();
+      state.popup = new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: '310px' })
+        .setLngLat(event.lngLat)
+        .setHTML(popupHtml(data))
+        .addTo(map);
+
+      state.popup.on('close', () => {
+        if (state.popup) {
+          state.popup = null;
+          clearSelection(false);
+        }
+      });
+    });
+
+    map.on('error', (event) => {
+      console.warn('MapLibre:', event.error || event);
+    });
+  </script>
+</body>
+</html>
